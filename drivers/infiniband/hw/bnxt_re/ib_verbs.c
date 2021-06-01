@@ -286,8 +286,10 @@ int bnxt_re_del_gid(const struct ib_gid_attr *attr, void **context)
 	struct bnxt_re_gid_ctx *ctx, **ctx_tbl;
 	struct bnxt_re_dev *rdev = to_bnxt_re_dev(attr->device, ibdev);
 	struct bnxt_qplib_sgid_tbl *sgid_tbl = &rdev->qplib_res.sgid_tbl;
+	struct bnxt_qplib_rcfw *rcfw = &rdev->rcfw;
 	struct bnxt_qplib_gid *gid_to_del;
 	u16 vlan_id = 0xFFFF;
+	int qp1_idx;
 
 	/* Delete the entry from the hardware */
 	ctx = *context;
@@ -307,9 +309,11 @@ int bnxt_re_del_gid(const struct ib_gid_attr *attr, void **context)
 		 * ADD_GID call with a different GID value for the same index
 		 * where we issue MODIFY_GID cmd to update the GID entry -- TBD
 		 */
+		qp1_idx = map_qp_id_to_tbl_indx(1, rcfw);
 		if (ctx->idx == 0 &&
 		    rdma_link_local_addr((struct in6_addr *)gid_to_del) &&
-		    ctx->refcnt == 1 && rdev->gsi_ctx.gsi_sqp) {
+		    ctx->refcnt == 1 &&
+		    rcfw->qp_tbl[qp1_idx].qp_id != BNXT_QPLIB_QP_ID_INVALID) {
 			ibdev_dbg(&rdev->ibdev,
 				  "Trying to delete GID0 while QP1 is alive\n");
 			return -EFAULT;
