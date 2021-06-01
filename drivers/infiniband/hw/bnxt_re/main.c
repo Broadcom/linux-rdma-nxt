@@ -771,6 +771,8 @@ static struct bnxt_re_dev *bnxt_re_dev_add(struct net_device *netdev,
 	atomic_set(&rdev->srq_count, 0);
 	atomic_set(&rdev->mr_count, 0);
 	atomic_set(&rdev->mw_count, 0);
+	atomic_set(&rdev->ah_count, 0);
+	atomic_set(&rdev->pd_count, 0);
 	rdev->cosq[0] = 0xFFFF;
 	rdev->cosq[1] = 0xFFFF;
 

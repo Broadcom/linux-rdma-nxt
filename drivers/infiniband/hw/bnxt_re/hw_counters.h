@@ -41,6 +41,8 @@
 #define __BNXT_RE_HW_STATS_H__
 
 enum bnxt_re_hw_stats {
+	BNXT_RE_ACTIVE_PD,
+	BNXT_RE_ACTIVE_AH,
 	BNXT_RE_ACTIVE_QP,
 	BNXT_RE_ACTIVE_SRQ,
 	BNXT_RE_ACTIVE_CQ,
