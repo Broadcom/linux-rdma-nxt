@@ -58,6 +58,8 @@
 #include "hw_counters.h"
 
 static const char * const bnxt_re_stat_name[] = {
+	[BNXT_RE_ACTIVE_PD]		=  "active_pds",
+	[BNXT_RE_ACTIVE_AH]		=  "active_ahs",
 	[BNXT_RE_ACTIVE_QP]		=  "active_qps",
 	[BNXT_RE_ACTIVE_SRQ]		=  "active_srqs",
 	[BNXT_RE_ACTIVE_CQ]		=  "active_cqs",
@@ -128,6 +130,8 @@ int bnxt_re_ib_get_hw_stats(struct ib_device *ibdev,
 	stats->value[BNXT_RE_ACTIVE_CQ] = atomic_read(&rdev->cq_count);
 	stats->value[BNXT_RE_ACTIVE_MR] = atomic_read(&rdev->mr_count);
 	stats->value[BNXT_RE_ACTIVE_MW] = atomic_read(&rdev->mw_count);
+	stats->value[BNXT_RE_ACTIVE_PD] = atomic_read(&rdev->pd_count);
+	stats->value[BNXT_RE_ACTIVE_AH] = atomic_read(&rdev->ah_count);
 	if (bnxt_re_stats) {
 		stats->value[BNXT_RE_RECOVERABLE_ERRORS] =
 			le64_to_cpu(bnxt_re_stats->tx_bcast_pkts);
