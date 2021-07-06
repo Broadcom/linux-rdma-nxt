@@ -39,6 +39,7 @@
 
 #ifndef __BNXT_RE_H__
 #define __BNXT_RE_H__
+#include "hw_counters.h"
 #define ROCE_DRV_MODULE_NAME		"bnxt_re"
 
 #define BNXT_RE_DESC	"Broadcom NetXtreme-C/E RoCE Driver"
@@ -184,10 +185,10 @@ struct bnxt_re_dev {
 
 	/* QP for for handling QP1 packets */
 	struct bnxt_re_gsi_context	gsi_ctx;
+	struct bnxt_re_stats		stats;
 	atomic_t nq_alloc_cnt;
 	u32 is_virtfn;
 	u32 num_vfs;
-	struct bnxt_qplib_roce_stats	stats;
 };
 
 #define to_bnxt_re_dev(ptr, member)	\

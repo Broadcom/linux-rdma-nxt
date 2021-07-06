@@ -450,4 +450,10 @@ static inline void bnxt_qplib_ring_nq_db(struct bnxt_qplib_db_info *info,
 	else
 		bnxt_qplib_ring_db32(info, arm);
 }
+
+static inline bool _is_ext_stats_supported(u16 dev_cap_flags)
+{
+	return dev_cap_flags &
+		CREQ_QUERY_FUNC_RESP_SB_EXT_STATS;
+}
 #endif /* __BNXT_QPLIB_RES_H__ */
