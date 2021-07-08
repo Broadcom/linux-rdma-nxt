@@ -1529,42 +1529,6 @@ static enum ib_qp_state __to_ib_qp_state(u8 state)
 	}
 }
 
-static u32 __from_ib_mtu(enum ib_mtu mtu)
-{
-	switch (mtu) {
-	case IB_MTU_256:
-		return CMDQ_MODIFY_QP_PATH_MTU_MTU_256;
-	case IB_MTU_512:
-		return CMDQ_MODIFY_QP_PATH_MTU_MTU_512;
-	case IB_MTU_1024:
-		return CMDQ_MODIFY_QP_PATH_MTU_MTU_1024;
-	case IB_MTU_2048:
-		return CMDQ_MODIFY_QP_PATH_MTU_MTU_2048;
-	case IB_MTU_4096:
-		return CMDQ_MODIFY_QP_PATH_MTU_MTU_4096;
-	default:
-		return CMDQ_MODIFY_QP_PATH_MTU_MTU_2048;
-	}
-}
-
-static enum ib_mtu __to_ib_mtu(u32 mtu)
-{
-	switch (mtu & CREQ_QUERY_QP_RESP_SB_PATH_MTU_MASK) {
-	case CMDQ_MODIFY_QP_PATH_MTU_MTU_256:
-		return IB_MTU_256;
-	case CMDQ_MODIFY_QP_PATH_MTU_MTU_512:
-		return IB_MTU_512;
-	case CMDQ_MODIFY_QP_PATH_MTU_MTU_1024:
-		return IB_MTU_1024;
-	case CMDQ_MODIFY_QP_PATH_MTU_MTU_2048:
-		return IB_MTU_2048;
-	case CMDQ_MODIFY_QP_PATH_MTU_MTU_4096:
-		return IB_MTU_4096;
-	default:
-		return IB_MTU_2048;
-	}
-}
-
 /* Shared Receive Queues */
 int bnxt_re_destroy_srq(struct ib_srq *ib_srq, struct ib_udata *udata)
 {
@@ -1943,18 +1907,19 @@ int bnxt_re_modify_qp(struct ib_qp *ib_qp, struct ib_qp_attr *qp_attr,
 		}
 	}
 
-	if (qp_attr_mask & IB_QP_PATH_MTU) {
-		qp->qplib_qp.modify_flags |=
-				CMDQ_MODIFY_QP_MODIFY_MASK_PATH_MTU;
-		qp->qplib_qp.path_mtu = __from_ib_mtu(qp_attr->path_mtu);
-		qp->qplib_qp.mtu = ib_mtu_enum_to_int(qp_attr->path_mtu);
-	} else if (qp_attr->qp_state == IB_QPS_RTR) {
-		qp->qplib_qp.modify_flags |=
-			CMDQ_MODIFY_QP_MODIFY_MASK_PATH_MTU;
-		qp->qplib_qp.path_mtu =
-			__from_ib_mtu(iboe_get_mtu(rdev->netdev->mtu));
-		qp->qplib_qp.mtu =
-			ib_mtu_enum_to_int(iboe_get_mtu(rdev->netdev->mtu));
+	/* MTU settings allowed only during INIT -> RTR */
+	if (qp_attr->qp_state == IB_QPS_RTR) {
+		rc = bnxt_re_init_qpmtu(qp, rdev->netdev->mtu, qp_attr_mask,
+					qp_attr);
+		if (rc) {
+			ibdev_err(&rdev->ibdev, "qp %#x invalid mtu",
+				  qp->qplib_qp.id);
+			/* TODO: Remove below line when driver has a way to
+			 * update user QP about trimmed mtu. Failure is non-
+			 * compliance to IB-Spec and is temporarily here.
+			 */
+			return -EINVAL;
+		}
 	}
 
 	if (qp_attr_mask & IB_QP_TIMEOUT) {

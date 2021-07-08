@@ -146,6 +146,75 @@ static inline u16 bnxt_re_get_rwqe_size(int nsge)
 	return sizeof(struct rq_wqe_hdr) + (nsge * sizeof(struct sq_sge));
 }
 
+static inline u32 __from_ib_mtu(enum ib_mtu mtu)
+{
+	switch (mtu) {
+	case IB_MTU_256:
+		return CMDQ_MODIFY_QP_PATH_MTU_MTU_256;
+	case IB_MTU_512:
+		return CMDQ_MODIFY_QP_PATH_MTU_MTU_512;
+	case IB_MTU_1024:
+		return CMDQ_MODIFY_QP_PATH_MTU_MTU_1024;
+	case IB_MTU_2048:
+		return CMDQ_MODIFY_QP_PATH_MTU_MTU_2048;
+	case IB_MTU_4096:
+		return CMDQ_MODIFY_QP_PATH_MTU_MTU_4096;
+	default:
+		return CMDQ_MODIFY_QP_PATH_MTU_MTU_2048;
+	}
+}
+
+static inline enum ib_mtu __to_ib_mtu(u32 mtu)
+{
+	switch (mtu & CREQ_QUERY_QP_RESP_SB_PATH_MTU_MASK) {
+	case CMDQ_MODIFY_QP_PATH_MTU_MTU_256:
+		return IB_MTU_256;
+	case CMDQ_MODIFY_QP_PATH_MTU_MTU_512:
+		return IB_MTU_512;
+	case CMDQ_MODIFY_QP_PATH_MTU_MTU_1024:
+		return IB_MTU_1024;
+	case CMDQ_MODIFY_QP_PATH_MTU_MTU_2048:
+		return IB_MTU_2048;
+	case CMDQ_MODIFY_QP_PATH_MTU_MTU_4096:
+		return IB_MTU_4096;
+	default:
+		return IB_MTU_2048;
+	}
+}
+
+static inline int bnxt_re_init_qpmtu(struct bnxt_re_qp *qp, int mtu,
+				     int mask, struct ib_qp_attr *qp_attr)
+{
+	int qpmtu, qpmtu_int;
+	int ifmtu, ifmtu_int;
+	int rc = 0;
+
+	ifmtu = iboe_get_mtu(mtu);
+	ifmtu_int = ib_mtu_enum_to_int(ifmtu);
+	qpmtu = ifmtu;
+	qpmtu_int = ifmtu_int;
+	if (mask & IB_QP_PATH_MTU) {
+		qpmtu = qp_attr->path_mtu;
+		qpmtu_int = ib_mtu_enum_to_int(qpmtu);
+		if (qpmtu_int > ifmtu_int) {
+			qpmtu = ifmtu;
+			qpmtu_int = ifmtu_int;
+			/* However, the code appears to be trimming mtu here
+			 * but, driver should fail this request due to inabi-
+			 * lity to cummunicate new mtu to user qp. Silent
+			 * trim to mtu would break retranmission psn calcul-
+			 * ations.
+			 */
+			rc = -EINVAL;
+		}
+	}
+	qp->qplib_qp.path_mtu = __from_ib_mtu(qpmtu);
+	qp->qplib_qp.mtu = qpmtu_int;
+	qp->qplib_qp.modify_flags |=
+		CMDQ_MODIFY_QP_MODIFY_MASK_PATH_MTU;
+	return rc;
+}
+
 int bnxt_re_query_device(struct ib_device *ibdev,
 			 struct ib_device_attr *ib_attr,
 			 struct ib_udata *udata);
