@@ -423,10 +423,17 @@ static void bnxt_qplib_service_creq(struct tasklet_struct *t)
 		budget--;
 	}
 
-	if (hwq->cons != raw_cons) {
-		hwq->cons = raw_cons;
+	if (budget == CREQ_ENTRY_POLL_BUDGET) {
 		bnxt_qplib_ring_nq_db(&creq->creq_db.dbinfo,
 				      rcfw->res->cctx, true);
+	} else {
+		hwq->cons = raw_cons;
+		/*
+		 * To reduce the number of interrupts from HW,
+		 * reschedule the tasklet instead of
+		 * enabling interrupts.
+		 */
+		tasklet_schedule(&creq->creq_tasklet);
 	}
 	spin_unlock_irqrestore(&hwq->lock, flags);
 }
@@ -434,17 +441,8 @@ static void bnxt_qplib_service_creq(struct tasklet_struct *t)
 static irqreturn_t bnxt_qplib_creq_irq(int irq, void *dev_instance)
 {
 	struct bnxt_qplib_rcfw *rcfw = dev_instance;
-	struct bnxt_qplib_creq_ctx *creq;
-	struct bnxt_qplib_hwq *hwq;
-	u32 sw_cons;
 
-	creq = &rcfw->creq;
-	hwq = &creq->hwq;
-	/* Prefetch the CREQ element */
-	sw_cons = HWQ_CMP(hwq->cons, hwq);
-	prefetch(bnxt_qplib_get_qe(hwq, sw_cons, NULL));
-
-	tasklet_schedule(&creq->creq_tasklet);
+	bnxt_qplib_service_creq(&rcfw->creq.creq_tasklet);
 
 	return IRQ_HANDLED;
 }
