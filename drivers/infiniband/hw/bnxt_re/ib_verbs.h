@@ -215,4 +215,5 @@ int bnxt_re_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
 
 unsigned long bnxt_re_lock_cqs(struct bnxt_re_qp *qp);
 void bnxt_re_unlock_cqs(struct bnxt_re_qp *qp, unsigned long flags);
+void bnxt_re_update_shadow_ah(struct bnxt_re_dev *rdev);
 #endif /* __BNXT_RE_IB_VERBS_H__ */
