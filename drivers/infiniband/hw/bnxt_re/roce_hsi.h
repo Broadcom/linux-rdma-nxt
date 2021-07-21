@@ -2869,7 +2869,9 @@ struct creq_query_func_resp_sb {
 	__le32 max_gid;
 	__le32 tqm_alloc_reqs[12];
 	__le32 max_dpi;
-	__le32 reserved_32;
+	u8 max_sge_var_wqe;
+	u8 reserved_8;
+	__le16 max_inline_data_var_wqe;
 };
 
 /* Set resources command response (16 bytes) */

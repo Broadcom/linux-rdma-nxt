@@ -42,6 +42,7 @@
 #include <linux/spinlock.h>
 #include <linux/sched.h>
 #include <linux/pci.h>
+#include <rdma/bnxt_re-abi.h>
 
 #include "roce_hsi.h"
 
@@ -92,6 +93,7 @@ int bnxt_qplib_get_dev_attr(struct bnxt_qplib_rcfw *rcfw,
 	struct creq_query_func_resp resp;
 	struct bnxt_qplib_rcfw_sbuf *sbuf;
 	struct creq_query_func_resp_sb *sb;
+	struct bnxt_qplib_chip_ctx *cctx;
 	u16 cmd_flags = 0;
 	u32 temp;
 	u8 *tqm_alloc;
@@ -106,6 +108,7 @@ int bnxt_qplib_get_dev_attr(struct bnxt_qplib_rcfw *rcfw,
 		return -ENOMEM;
 	}
 
+	cctx = rcfw->res->cctx;
 	sb = sbuf->sb;
 	req.resp_size = sizeof(*sb) / BNXT_QPLIB_CMDQE_UNITS;
 	rc = bnxt_qplib_rcfw_send_message(rcfw, (void *)&req, (void *)&resp,
@@ -130,8 +133,18 @@ int bnxt_qplib_get_dev_attr(struct bnxt_qplib_rcfw *rcfw,
 	 * reporting the max number
 	 */
 	attr->max_qp_wqes -= BNXT_QPLIB_RESERVED_QP_WRS + 1;
-	attr->max_qp_sges = bnxt_qplib_is_chip_gen_p5(rcfw->res->cctx) ?
-			    6 : sb->max_sge;
+
+	if ((bnxt_qplib_is_chip_gen_p5(cctx)) &&
+	    (cctx->modes.wqe_mode == BNXT_QPLIB_WQE_MODE_VARIABLE)) {
+		u16 data_var_wqe;
+		attr->max_qp_sges = sb->max_sge_var_wqe;
+		data_var_wqe = le16_to_cpu(sb->max_inline_data_var_wqe);
+		attr->max_inline_data =	data_var_wqe;
+	} else {
+		attr->max_qp_sges = sb->max_sge;
+		attr->max_inline_data = le32_to_cpu(sb->max_inline_data);
+	}
+
 	attr->max_cq = le32_to_cpu(sb->max_cq);
 	attr->max_cq_wqes = le32_to_cpu(sb->max_cqe);
 	attr->max_cq_sges = attr->max_qp_sges;
@@ -157,7 +170,6 @@ int bnxt_qplib_get_dev_attr(struct bnxt_qplib_rcfw *rcfw,
 		attr->max_pkey = 0xFFFF;
 	}
 
-	attr->max_inline_data = le32_to_cpu(sb->max_inline_data);
 	attr->l2_db_size = (sb->l2_db_space_size + 1) *
 			    (0x01 << RCFW_DBR_BASE_PAGE_SHIFT);
 	attr->max_sgid = BNXT_QPLIB_NUM_GIDS_SUPPORTED;
