@@ -3141,6 +3141,35 @@ static bool bnxt_re_is_loopback_packet(struct bnxt_re_dev *rdev,
 	return rc;
 }
 
+static bool bnxt_re_is_vlan_in_packet(struct bnxt_re_dev *rdev,
+				      void *rq_hdr_buf,
+				      struct bnxt_qplib_cqe *cqe)
+{
+	struct vlan_hdr *vlan_hdr;
+	struct ethhdr *eth_hdr;
+	u8 *tmp_buf = NULL;
+	bool rc = false;
+	u16 eth_type;
+
+	tmp_buf = (u8 *)rq_hdr_buf;
+	/* Check the  ether type */
+	eth_hdr = (struct ethhdr *)tmp_buf;
+	eth_type = ntohs(eth_hdr->h_proto);
+	if (eth_type == ETH_P_8021Q) {
+		tmp_buf += sizeof(struct ethhdr);
+		vlan_hdr = (struct vlan_hdr *)tmp_buf;
+		cqe->raweth_qp1_metadata =
+			ntohs(vlan_hdr->h_vlan_TCI) |
+			(eth_type <<
+			 CQ_RES_RAWETH_QP1_RAWETH_QP1_METADATA_TPID_SFT);
+		cqe->raweth_qp1_flags2 |=
+			CQ_RES_RAWETH_QP1_RAWETH_QP1_FLAGS2_META_FORMAT_VLAN;
+		rc = true;
+	}
+
+	return rc;
+}
+
 static int bnxt_re_process_raw_qp_pkt_rx(struct bnxt_re_qp *gsi_qp,
 					 struct bnxt_qplib_cqe *cqe)
 {
@@ -3180,10 +3209,6 @@ static int bnxt_re_process_raw_qp_pkt_rx(struct bnxt_re_qp *gsi_qp,
 							    tbl_idx);
 	sqp_entry = &rdev->gsi_ctx.sqp_tbl[tbl_idx];
 
-	/* Store this cqe */
-	memcpy(&sqp_entry->cqe, cqe, sizeof(struct bnxt_qplib_cqe));
-	sqp_entry->qp1_qp = gsi_qp;
-
 	/* Find packet type from the cqe */
 
 	pkt_type = bnxt_re_check_packet_type(cqe->raweth_qp1_flags,
@@ -3204,6 +3229,13 @@ static int bnxt_re_process_raw_qp_pkt_rx(struct bnxt_re_qp *gsi_qp,
 	 */
 	if (bnxt_re_is_loopback_packet(rdev, rq_hdr_buf))
 		skip_bytes = 4;
+
+	if (bnxt_re_is_vlan_in_packet(rdev, rq_hdr_buf, cqe))
+		skip_bytes += VLAN_HLEN;
+
+	/* Store this cqe */
+	memcpy(&sqp_entry->cqe, cqe, sizeof(struct bnxt_qplib_cqe));
+	sqp_entry->qp1_qp = gsi_qp;
 
 	/* First send SGE . Skip the ether header*/
 	s_sge[0].addr = rq_hdr_buf_map + BNXT_QPLIB_MAX_QP1_RQ_ETH_HDR_SIZE
