@@ -764,11 +764,23 @@ static int bnxt_re_destroy_gsi_sqp(struct bnxt_re_qp *qp)
 	gsi_sqp = rdev->gsi_ctx.gsi_sqp;
 	gsi_sah = rdev->gsi_ctx.gsi_sah;
 
-	ibdev_dbg(&rdev->ibdev, "Destroy the shadow AH\n");
-	bnxt_qplib_destroy_ah(&rdev->qplib_res,
-			      &gsi_sah->qplib_ah,
-			      true);
-	atomic_dec(&rdev->ah_count);
+	/* remove from active qp list */
+	mutex_lock(&rdev->qp_lock);
+	list_del(&gsi_sqp->list);
+	mutex_unlock(&rdev->qp_lock);
+
+	if (gsi_sah) {
+		ibdev_dbg(&rdev->ibdev, "Destroy the shadow AH\n");
+		rc = bnxt_qplib_destroy_ah(&rdev->qplib_res,
+					   &gsi_sah->qplib_ah,
+					   true);
+		if (rc) {
+			ibdev_err(&rdev->ibdev,
+				  "Destroy HW AH for shadow QP failed!");
+			goto fail;
+		}
+		atomic_dec(&rdev->ah_count);
+	}
 	bnxt_qplib_clean_qp(&qp->qplib_qp);
 
 	ibdev_dbg(&rdev->ibdev, "Destroy the shadow QP\n");
@@ -779,11 +791,6 @@ static int bnxt_re_destroy_gsi_sqp(struct bnxt_re_qp *qp)
 	}
 	bnxt_qplib_free_qp_res(&rdev->qplib_res, &gsi_sqp->qplib_qp);
 
-	/* remove from active qp list */
-	mutex_lock(&rdev->qp_lock);
-	list_del(&gsi_sqp->list);
-	mutex_unlock(&rdev->qp_lock);
-	atomic_dec(&rdev->qp_count);
 
 	kfree(rdev->gsi_ctx.sqp_tbl);
 	kfree(gsi_sah);
@@ -791,9 +798,14 @@ static int bnxt_re_destroy_gsi_sqp(struct bnxt_re_qp *qp)
 	rdev->gsi_ctx.gsi_sqp = NULL;
 	rdev->gsi_ctx.gsi_sah = NULL;
 	rdev->gsi_ctx.sqp_tbl = NULL;
+	atomic_dec(&rdev->qp_count);
 
 	return 0;
 fail:
+	mutex_lock(&rdev->qp_lock);
+	list_add_tail(&gsi_sqp->list, &rdev->qp_list);
+	atomic_inc(&rdev->qp_count);
+	mutex_unlock(&rdev->qp_lock);
 	return rc;
 }
 
@@ -1011,6 +1023,10 @@ static struct bnxt_re_ah *bnxt_re_create_shadow_qp_ah
 	ah->qplib_ah.sl = 0;
 	/* Have DMAC same as SMAC */
 	ether_addr_copy(ah->qplib_ah.dmac, rdev->netdev->dev_addr);
+	ibdev_dbg(&rdev->ibdev, "ah->qplib_ah.dmac = %x:%x:%x:%x:%x:%x\n",
+		  ah->qplib_ah.dmac[0], ah->qplib_ah.dmac[1],
+		  ah->qplib_ah.dmac[2], ah->qplib_ah.dmac[3],
+		  ah->qplib_ah.dmac[4], ah->qplib_ah.dmac[5]);
 
 	rc = bnxt_qplib_create_ah(&rdev->qplib_res, &ah->qplib_ah, false);
 	if (rc) {
@@ -1025,6 +1041,55 @@ static struct bnxt_re_ah *bnxt_re_create_shadow_qp_ah
 fail:
 	kfree(ah);
 	return NULL;
+}
+
+void bnxt_re_update_shadow_ah(struct bnxt_re_dev *rdev)
+{
+	struct bnxt_re_qp *gsi_sqp;
+	struct bnxt_re_qp *gsi_qp;
+	struct bnxt_re_ah *sah;
+	struct bnxt_re_pd *pd;
+	struct ib_pd *ib_pd;
+	int rc;
+
+	if (!rdev)
+		return;
+
+	sah = rdev->gsi_ctx.gsi_sah;
+
+	ibdev_dbg(&rdev->ibdev, "Updating the AH\n");
+	if (sah) {
+		/* Check if the AH created with current mac address */
+		if (!compare_ether_header(sah->qplib_ah.dmac,
+					  rdev->netdev->dev_addr)) {
+			ibdev_dbg(&rdev->ibdev,
+				  "Not modifying shadow AH during AH update\n");
+			return;
+		}
+
+		gsi_qp = rdev->gsi_ctx.gsi_qp;
+		gsi_sqp = rdev->gsi_ctx.gsi_sqp;
+		ib_pd = gsi_qp->ib_qp.pd;
+		pd = container_of(ib_pd, struct bnxt_re_pd, ib_pd);
+		rc = bnxt_qplib_destroy_ah(&rdev->qplib_res,
+					   &sah->qplib_ah, false);
+		if (rc) {
+			ibdev_err(&rdev->ibdev,
+				  "Failed to destroy shadow AH during AH update");
+			return;
+		}
+		kfree(sah);
+		rdev->gsi_ctx.gsi_sah = NULL;
+
+		sah = bnxt_re_create_shadow_qp_ah(pd, &rdev->qplib_res,
+						  &gsi_qp->qplib_qp);
+		if (!sah) {
+			ibdev_err(&rdev->ibdev,
+				  "Failed to update AH for ShadowQP");
+			return;
+		}
+		rdev->gsi_ctx.gsi_sah = sah;
+	}
 }
 
 static struct bnxt_re_qp *bnxt_re_create_shadow_qp

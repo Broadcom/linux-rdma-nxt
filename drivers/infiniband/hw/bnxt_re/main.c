@@ -1328,6 +1328,7 @@ static int bnxt_re_ib_init(struct bnxt_re_dev *rdev)
 	ib_get_eth_speed(&rdev->ibdev, 1, &rdev->active_speed,
 			 &rdev->active_width);
 	set_bit(BNXT_RE_FLAG_ISSUE_ROCE_STATS, &rdev->flags);
+	set_bit(BNXT_RE_FLAG_IBDEV_REGISTERED, &rdev->flags);
 
 	event = netif_running(rdev->netdev) && netif_carrier_ok(rdev->netdev) ?
 		IB_EVENT_PORT_ACTIVE : IB_EVENT_PORT_ERR;
@@ -1724,6 +1725,14 @@ static int bnxt_re_netdev_event(struct notifier_block *notifier,
 		ib_unregister_device_queued(&rdev->ibdev);
 		break;
 
+	case NETDEV_CHANGEADDR:
+		/* MAC addr change event */
+		if (!bnxt_qplib_is_chip_gen_p5(rdev->chip_ctx) &&
+		    test_bit(BNXT_RE_FLAG_IBDEV_REGISTERED, &rdev->flags))
+			bnxt_re_update_shadow_ah(rdev);
+		bnxt_qplib_get_guid(rdev->netdev->dev_addr,
+				    (u8 *)&rdev->ibdev.node_guid);
+		break;
 	default:
 		sch_work = true;
 		break;
@@ -1791,7 +1800,9 @@ static void __exit bnxt_re_mod_exit(void)
 		 * shall be removed before the PF during the call of
 		 * ib_unregister_driver.
 		 */
-		if (rdev->is_virtfn)
+		if (rdev->is_virtfn &&
+		    (test_and_clear_bit(BNXT_RE_FLAG_IBDEV_REGISTERED,
+				       &rdev->flags)))
 			ib_unregister_device(&rdev->ibdev);
 	}
 	ib_unregister_driver(RDMA_DRIVER_BNXT_RE);
