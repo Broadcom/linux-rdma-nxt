@@ -1725,6 +1725,8 @@ static int bnxt_re_netdev_event(struct notifier_block *notifier,
 		if (!bnxt_qplib_is_chip_gen_p5(rdev->chip_ctx) &&
 		    test_bit(BNXT_RE_FLAG_IBDEV_REGISTERED, &rdev->flags))
 			bnxt_re_update_shadow_ah(rdev);
+		bnxt_qplib_get_guid(rdev->netdev->dev_addr,
+				    (u8 *)&rdev->ibdev.node_guid);
 		break;
 	default:
 		sch_work = true;
