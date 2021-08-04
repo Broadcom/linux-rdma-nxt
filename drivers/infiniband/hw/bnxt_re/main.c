@@ -161,18 +161,27 @@ static void bnxt_re_limit_pf_res(struct bnxt_re_dev *rdev)
 	attr = &rdev->dev_attr;
 	ctx = &rdev->qplib_ctx;
 
-	ctx->qpc_count = min_t(u32, BNXT_RE_MAX_QPC_COUNT,
-			       attr->max_qp);
-	ctx->mrw_count = BNXT_RE_MAX_MRW_COUNT_256K;
-	/* Use max_mr from fw since max_mrw does not get set */
-	ctx->mrw_count = min_t(u32, ctx->mrw_count, attr->max_mr);
-	ctx->srqc_count = min_t(u32, BNXT_RE_MAX_SRQC_COUNT,
+	if (!bnxt_qplib_is_chip_gen_p5(rdev->chip_ctx)) {
+		ctx->qpc_count = min_t(u32, BNXT_RE_MAX_QPC_COUNT,
+				attr->max_qp);
+		ctx->mrw_count = BNXT_RE_MAX_MRW_COUNT_256K;
+		/* Use max_mr from fw since max_mrw does not get set */
+		ctx->mrw_count = min_t(u32, ctx->mrw_count, attr->max_mr);
+		ctx->srqc_count = min_t(u32, BNXT_RE_MAX_SRQC_COUNT,
 				attr->max_srq);
-	ctx->cq_count = min_t(u32, BNXT_RE_MAX_CQ_COUNT, attr->max_cq);
-	if (!bnxt_qplib_is_chip_gen_p5(rdev->chip_ctx))
+		ctx->cq_count = min_t(u32, BNXT_RE_MAX_CQ_COUNT, attr->max_cq);
 		for (i = 0; i < MAX_TQM_ALLOC_REQ; i++)
 			rdev->qplib_ctx.tqm_ctx.qcount[i] =
-			rdev->dev_attr.tqm_alloc_reqs[i];
+				rdev->dev_attr.tqm_alloc_reqs[i];
+	} else {
+		printk("attr->max_qp = %d\n", attr->max_qp);
+		printk("attr->max_cq = %d\n", attr->max_cq);
+		ctx->qpc_count = attr->max_qp ? attr->max_qp :  BNXT_RE_MAX_QPC_COUNT,
+		ctx->mrw_count = attr->max_mr ? attr->max_mr : BNXT_RE_MAX_MRW_COUNT_256K;
+		ctx->srqc_count = attr->max_srq ? attr->max_srq : BNXT_RE_MAX_SRQC_COUNT;
+		ctx->cq_count = attr->max_cq ?  attr->max_cq : BNXT_RE_MAX_CQ_COUNT;
+	}
+
 }
 
 static void bnxt_re_limit_vf_res(struct bnxt_qplib_ctx *qplib_ctx, u32 num_vf)
@@ -213,15 +222,11 @@ static void bnxt_re_limit_vf_res(struct bnxt_qplib_ctx *qplib_ctx, u32 num_vf)
 
 static void bnxt_re_set_resource_limits(struct bnxt_re_dev *rdev)
 {
-	u32 num_vfs;
 
 	memset(&rdev->qplib_ctx.vf_res, 0, sizeof(struct bnxt_qplib_vf_res));
 	bnxt_re_limit_pf_res(rdev);
-
-	num_vfs =  bnxt_qplib_is_chip_gen_p5(rdev->chip_ctx) ?
-			BNXT_RE_GEN_P5_MAX_VF : rdev->num_vfs;
-	if (num_vfs)
-		bnxt_re_limit_vf_res(&rdev->qplib_ctx, num_vfs);
+	if (rdev->num_vfs)
+		bnxt_re_limit_vf_res(&rdev->qplib_ctx, rdev->num_vfs);
 }
 
 /* for handling bnxt_en callbacks later */
@@ -274,11 +279,9 @@ static void bnxt_re_sriov_config(void *p, int num_vfs)
 	if (test_bit(BNXT_RE_FLAG_ERR_DEVICE_DETACHED, &rdev->flags))
 		return;
 	rdev->num_vfs = num_vfs;
-	if (!bnxt_qplib_is_chip_gen_p5(rdev->chip_ctx)) {
-		bnxt_re_set_resource_limits(rdev);
-		bnxt_qplib_set_func_resources(&rdev->qplib_res, &rdev->rcfw,
-					      &rdev->qplib_ctx);
-	}
+	bnxt_re_set_resource_limits(rdev);
+	bnxt_qplib_set_func_resources(&rdev->qplib_res, &rdev->rcfw,
+				      &rdev->qplib_ctx);
 }
 
 static void bnxt_re_shutdown(void *p)
