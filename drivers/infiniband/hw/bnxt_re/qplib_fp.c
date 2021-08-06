@@ -141,9 +141,13 @@ void bnxt_qplib_clean_qp(struct bnxt_qplib_qp *qp)
 	__clean_cq(qp->scq, (u64)(unsigned long)qp);
 	qp->sq.hwq.prod = 0;
 	qp->sq.hwq.cons = 0;
+	qp->sq.swq_start = 0;
+	qp->sq.swq_last = 0;
 	__clean_cq(qp->rcq, (u64)(unsigned long)qp);
 	qp->rq.hwq.prod = 0;
 	qp->rq.hwq.cons = 0;
+	qp->rq.swq_start = 0;
+	qp->rq.swq_last = 0;
 
 	__bnxt_qplib_del_flush_qp(qp);
 	bnxt_qplib_release_cq_flush_locks(qp, &flags);
