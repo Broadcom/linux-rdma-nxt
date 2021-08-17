@@ -1644,8 +1644,6 @@ int bnxt_re_destroy_srq(struct ib_srq *ib_srq, struct ib_udata *udata)
 	bnxt_qplib_destroy_srq(&rdev->qplib_res, qplib_srq);
 	ib_umem_release(srq->umem);
 	atomic_dec(&rdev->srq_count);
-	if (nq)
-		nq->budget--;
 	return 0;
 }
 
@@ -1753,8 +1751,6 @@ int bnxt_re_create_srq(struct ib_srq *ib_srq,
 			goto fail;
 		}
 	}
-	if (nq)
-		nq->budget++;
 	atomic_inc(&rdev->srq_count);
 
 	return 0;
@@ -2870,18 +2866,15 @@ int bnxt_re_post_recv(struct ib_qp *ib_qp, const struct ib_recv_wr *wr,
 int bnxt_re_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 {
 	struct bnxt_re_cq *cq;
-	struct bnxt_qplib_nq *nq;
 	struct bnxt_re_dev *rdev;
 
 	cq = container_of(ib_cq, struct bnxt_re_cq, ib_cq);
 	rdev = cq->rdev;
-	nq = cq->qplib_cq.nq;
 
 	bnxt_qplib_destroy_cq(&rdev->qplib_res, &cq->qplib_cq);
 	ib_umem_release(cq->umem);
 
 	atomic_dec(&rdev->cq_count);
-	nq->budget--;
 	kfree(cq->cql);
 	return 0;
 }
@@ -2962,7 +2955,6 @@ int bnxt_re_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 
 	cq->ib_cq.cqe = entries;
 	cq->cq_period = cq->qplib_cq.period;
-	nq->budget++;
 
 	atomic_inc(&rdev->cq_count);
 	spin_lock_init(&cq->cq_lock);

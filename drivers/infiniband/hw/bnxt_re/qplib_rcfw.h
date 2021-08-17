@@ -112,7 +112,7 @@ struct bnxt_qplib_crsbe {
 #define CREQ_CMP_VALID(hdr, raw_cons, cp_bit)			\
 	(!!((hdr)->v & CREQ_BASE_V) ==				\
 	   !((raw_cons) & (cp_bit)))
-#define CREQ_ENTRY_POLL_BUDGET		0x100
+#define CREQ_ENTRY_POLL_BUDGET		8
 
 /* HWQ */
 typedef int (*aeq_handler_t)(struct bnxt_qplib_rcfw *, void *, void *);
@@ -162,6 +162,8 @@ struct bnxt_qplib_creq_db {
 };
 
 struct bnxt_qplib_creq_stat {
+	u64	creq_arm_count;
+	u64	creq_tasklet_schedule_count;
 	u64	creq_qp_event_processed;
 	u64	creq_func_event_processed;
 };
