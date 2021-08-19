@@ -632,16 +632,16 @@ void bnxt_qplib_rcfw_stop_irq(struct bnxt_qplib_rcfw *rcfw, bool kill)
 
 	if (!creq->requested)
 		return;
-	tasklet_disable(&creq->creq_tasklet);
+	creq->requested = false;
 	/* Mask h/w interrupts */
 	bnxt_qplib_ring_nq_db(&creq->creq_db.dbinfo, rcfw->res->cctx, false);
 	/* Sync with last running IRQ-handler */
 	synchronize_irq(creq->msix_vec);
+	free_irq(creq->msix_vec, rcfw);
+	/* Cleanup Tasklet */
 	if (kill)
 		tasklet_kill(&creq->creq_tasklet);
-
-	free_irq(creq->msix_vec, rcfw);
-	creq->requested = false;
+	tasklet_disable(&creq->creq_tasklet);
 }
 
 void bnxt_qplib_disable_rcfw_channel(struct bnxt_qplib_rcfw *rcfw)
